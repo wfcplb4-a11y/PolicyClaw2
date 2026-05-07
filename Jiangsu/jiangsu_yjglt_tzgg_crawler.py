@@ -118,7 +118,7 @@ def scrape_data():
                     detail_soup = BeautifulSoup(detail_resp.content, 'html.parser')
 
                     # 尝试多个选择器
-                    for selector in ['.TRS_Editor', '#zoom', '.content', '#content', '.article-content']:
+                    for selector in ['div.main-fl.bt-left', '.TRS_Editor', '#zoom', '.content', '#content', '.article-content']:
                         elem = detail_soup.select_one(selector)
                         if elem:
                             text = elem.get_text(separator='\n', strip=True)
