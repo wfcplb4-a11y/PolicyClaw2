@@ -20,12 +20,41 @@ except ImportError:
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Referer': 'https://sousuo.www.gov.cn/'
+    'Referer': 'https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary',
+    'Origin': 'https://sousuo.www.gov.cn'
 }
 
 TARGET_URL = "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=&t=zhengcelibrary&orpro="
+
+API_URL = "https://sousuo.www.gov.cn/search-gov/data"
+API_COOKIES = "_qimei_uuid42=19b0c0b313910000a4cf89a20e72d2bc27b92965c2; _qimei_i_3=7be76886c45e58d8c7c4af61528177e3f3efa4a7100d558ae7dc7e5e2f90226b356663943c89e2bd8084; _qimei_h38=aea3debfa4cf89a20e72d2bc02000000819b0c; wdcid=0c788098375b7e28; __auc=053a196d19bd558a9d02fc6b252; _qimei_i_1=7fcd64d3c00b538f94c5a8615fd725e8febfa6f1475c01d6b6dd7b582493206c6163379d3980b0dc85b7f3e4; _qimei_fingerprint=933d898aca3f979f69c8525dc88033dd; arialoadData=false; ariauseGraymode=false"
+
+CATEGORY_MAP = {
+    'gongwen': '国务院文件',
+    'bumenfile': '国务院部门文件',
+    'otherfile': '其他文件',
+    'gongbao': '国务院公报'
+}
+
+def get_api_session():
+    session = requests.Session()
+    
+    main_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    }
+    
+    session.get(TARGET_URL, headers=main_headers, timeout=30)
+    
+    for cookie in API_COOKIES.split('; '):
+        if '=' in cookie:
+            name, value = cookie.split('=', 1)
+            session.cookies.set(name.strip(), value.strip())
+    
+    return session
 
 
 def scrape_with_selenium():
@@ -103,6 +132,62 @@ def scrape_with_selenium():
     return None
 
 
+def scrape_with_api():
+    try:
+        session = get_api_session()
+        params = {
+            't': 'zhengcelibrary',
+            'q': '',
+            'p': '1',
+            'n': '200',
+            'type': 'gwyzcwjk'
+        }
+        response = session.get(API_URL, headers=headers, params=params, timeout=30)
+        data = response.json()
+        searchVO = data.get('searchVO', {})
+        catMap = searchVO.get('catMap', {})
+        
+        all_items = []
+        
+        for catKey, catData in catMap.items():
+            catName = CATEGORY_MAP.get(catKey, catKey)
+            listVO = catData.get('listVO', [])
+            
+            for item in listVO:
+                title_raw = item.get('title', '')
+                title = re.sub(r'</?em>', '', title_raw)
+                title = re.sub(r'<br\s*/?>', ' ', title)
+                
+                date_str = item.get('pubtimeStr', '')
+                pub_at = None
+                if date_str:
+                    try:
+                        pub_at = datetime.strptime(date_str, '%Y.%m.%d').date()
+                    except ValueError:
+                        pass
+                
+                pcode = item.get('pcode', '')
+                url = item.get('sourcelink', item.get('url', ''))
+                
+                if not url:
+                    continue
+                
+                all_items.append({
+                    'title': title,
+                    'url': url,
+                    'pub_at': pub_at,
+                    'category': catName,
+                    'pcode': pcode
+                })
+        
+        return all_items
+    except Exception as e:
+        print(f"API fetch error: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
 def scrape_data():
     policies = []
     all_items = []
@@ -115,60 +200,25 @@ def scrape_data():
         print(f"Running date (Beijing): {today}")
         print(f"Target date: {yesterday}")
         
-        page_source = None
+        print("Using API to fetch data...")
+        all_items = scrape_with_api()
         
-        if SELENIUM_AVAILABLE:
-            print("Using Selenium to render page...")
-            page_source = scrape_with_selenium()
-        
-        if not page_source:
-            print("Using direct request...")
-            response = requests.get(TARGET_URL, headers=headers, timeout=30)
-            response.raise_for_status()
-            page_source = response.text
-        
-        soup = BeautifulSoup(page_source, 'html.parser')
-        
-        target_sections = ['国务院文件', '国务院部门文件', '国务院办公厅文件', '国务院公报', '解读、政策解读']
-        all_divs = soup.find_all('div', attrs={'data-desc': True})
-        
-        divs = [d for d in all_divs if d.get('data-desc') in target_sections and 'middle_result_con' in d.get('class', [])]
-        
-        print(f"Found {len(divs)} policy list containers across sections: {target_sections}")
+        print(f"Found {len(all_items)} items from API")
         
         filtered_count = 0
         
-        for div in divs:
+        for item in all_items:
             try:
-                a_tag = div.find('a', href=True)
-                if not a_tag:
-                    continue
-                
-                title = a_tag.get('title', '').strip() or a_tag.get_text(strip=True)
-                href = a_tag.get('href', '').strip()
+                title = item.get('title', '')
+                href = item.get('url', '')
+                pub_at = item.get('pub_at')
+                category = item.get('category', '')
                 
                 if not title or not href:
                     continue
                 
                 if not href.startswith('http'):
                     href = f"https://sousuo.www.gov.cn{href}"
-                
-                span_tags = div.find_all('span')
-                date_str = ''
-                for span in span_tags:
-                    text = span.get_text(strip=True)
-                    if re.match(r'\d{4}-\d{2}-\d{2}', text):
-                        date_str = text
-                        break
-                
-                pub_at = None
-                if date_str:
-                    try:
-                        pub_at = datetime.strptime(date_str, '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-                
-                all_items.append({'title': title, 'pub_at': pub_at})
                 
                 if pub_at != yesterday:
                     filtered_count += 1
@@ -203,7 +253,7 @@ def scrape_data():
                     'pub_at': pub_at,
                     'content': content,
                     'selected': False,
-                    'category': '',
+                    'category': category,
                     'source': '国务院文件'
                 }
                 
@@ -221,7 +271,8 @@ def scrape_data():
             sorted_items = sorted(all_items, key=lambda x: x['pub_at'] or datetime.min.date(), reverse=True)
             for i, item in enumerate(sorted_items, 1):
                 date_str = item['pub_at'].strftime('%Y-%m-%d') if item['pub_at'] else 'Unknown date'
-                print(f"{i}. {item['title'][:70]} [{date_str}]")
+                title_clean = re.sub(r'\s+', ' ', item['title'])
+                print(f"{i}. {title_clean[:70]} [{date_str}]")
         
     except Exception as e:
         print(f"State Council Document Crawler: Failed - {e}")
