@@ -314,6 +314,55 @@ if __name__ == "__main__":
     except ImportError as e:
         print(f"⚠️  导入国务院文件爬虫失败: {e}")
     
+    # 导入教育部文件爬虫
+    try:
+        from Ministries import moe_wj_crawler
+        manager.register_crawler("教育部文件", moe_wj_crawler.run, moe_wj_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入教育部文件爬虫失败: {e}")
+    
+    # 导入科技部政策解读爬虫
+    try:
+        from Ministries import most_zjgx_crawler
+        manager.register_crawler("科技部政策解读", most_zjgx_crawler.run, most_zjgx_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入科技部政策解读爬虫失败: {e}")
+    
+    # 导入科技部规范性文件爬虫
+    try:
+        from Ministries import most_gfxwj_crawler
+        manager.register_crawler("科技部规范性文件", most_gfxwj_crawler.run, most_gfxwj_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入科技部规范性文件爬虫失败: {e}")
+    
+    # 导入公安部政策文件爬虫
+    try:
+        from Ministries import mps_crawler
+        manager.register_crawler("公安部政策文件", mps_crawler.run, mps_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入公安部政策文件爬虫失败: {e}")
+    
+    # 导入民政部政策文件爬虫
+    try:
+        from Ministries import mca_crawler
+        manager.register_crawler("民政部政策文件", mca_crawler.run, mca_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入民政部政策文件爬虫失败: {e}")
+    
+    # 导入司法部政策文件爬虫
+    try:
+        from Ministries import moj_crawler
+        manager.register_crawler("司法部政策文件", moj_crawler.run, moj_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入司法部政策文件爬虫失败: {e}")
+    
+    # 导入财政部通知爬虫
+    try:
+        from Ministries import mof_crawler
+        manager.register_crawler("财政部通知", mof_crawler.run, mof_crawler)
+    except ImportError as e:
+        print(f"⚠️  导入财政部通知爬虫失败: {e}")
+    
     # 导入国家发改委爬虫
     try:
         from Ministries import ndrc_crawler

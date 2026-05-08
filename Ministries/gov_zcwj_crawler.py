@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 import re
 
-Headers = {
+headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -54,7 +54,7 @@ def scrape_with_api():
             'n': '200',
             'type': 'gwyzcwjk'
         }
-        response = session.get(API_URL, headers=Headers, params=params, timeout=30)
+        response = session.get(API_URL, headers=headers, params=params, timeout=30)
         data = response.json()
         searchVO = data.get('searchVO', {})
         catMap = searchVO.get('catMap', {})
@@ -94,7 +94,7 @@ def scrape_with_api():
         
         return all_items
     except Exception as e:
-        print(f"API fetch error: {e}")
+        print(f"⚠️  API获取数据失败：{e}")
         import traceback
         traceback.print_exc()
         return []
@@ -109,13 +109,13 @@ def scrape_data():
         today = datetime.now(tz_utc8).date()
         yesterday = today - timedelta(days=1)
         
-        print(f"运行日期（北京时间）：{today}")
-        print(f"目标抓取日期：{yesterday}")
+        print(f"📅 运行日期（北京时间）：{today}")
+        print(f"🎯 目标抓取日期：{yesterday}")
         
         print("正在从API获取数据...")
         all_items = scrape_with_api()
         
-        print(f"API返回 {len(all_items)} 条数据")
+        print(f"📋 API返回 {len(all_items)} 条数据")
         
         filtered_count = 0
         
@@ -138,7 +138,7 @@ def scrape_data():
                 
                 content = ""
                 try:
-                    detail_resp = requests.get(href, headers=Headers, timeout=15)
+                    detail_resp = requests.get(href, headers=headers, timeout=15)
                     detail_resp.raise_for_status()
                     detail_soup = BeautifulSoup(detail_resp.content, 'html.parser')
                     
@@ -157,7 +157,7 @@ def scrape_data():
                                     max_text = text
                             content = max_text
                 except Exception as e:
-                    print(f"抓取详情页失败：{e}")
+                    print(f"⚠️  抓取详情页失败：{e}")
                 
                 policy_data = {
                     'title': title,
@@ -172,22 +172,22 @@ def scrape_data():
                 policies.append(policy_data)
                 
             except Exception as e:
-                print(f"单条数据处理失败 - {e}")
+                print(f"⚠️  单条数据处理失败 - {e}")
                 continue
         
-        print(f"\n国务院文件爬虫：成功抓取 {len(policies)} 条前一天数据")
-        print(f"过滤掉 {filtered_count} 条非目标日期的数据")
+        print(f"\n✅ 国务院文件爬虫：成功抓取 {len(policies)} 条前一天数据")
+        print(f"⏭️  过滤掉 {filtered_count} 条非目标日期的数据")
         
         if all_items:
-            print(f"\n页面最新5条是：")
+            print(f"\n📊 页面最新5条是：")
             sorted_items = sorted(all_items, key=lambda x: x['pub_at'] or datetime.min.date(), reverse=True)
             for i, item in enumerate(sorted_items[:5], 1):
                 date_str = item['pub_at'].strftime('%Y-%m-%d') if item['pub_at'] else '未知日期'
                 title_clean = re.sub(r'\s+', ' ', item['title'])
-                print(f"{title_clean[:50]}... {date_str}")
+                print(f"✅ {title_clean[:50]}... {date_str}")
         
     except Exception as e:
-        print(f"国务院文件爬虫：抓取失败 - {e}")
+        print(f"❌ 国务院文件爬虫：抓取失败 - {e}")
         print("----------------------------------------")
     
     return policies, all_items
@@ -207,17 +207,17 @@ def run():
         data, _ = scrape_data()
         if data:
             result, api_push_result = save_to_supabase(data)
-            print(f"\n写入数据库: {len(result)} 条")
+            print(f"\n💾 写入数据库: {len(result)} 条")
             print("----------------------------------------")
-            print("爬虫 国务院文件 执行成功")
+            print("✅ 爬虫 国务院文件 执行成功")
             return result, api_push_result
         else:
-            print(f"\n写入数据库: 0 条")
+            print(f"\n💾 写入数据库: 0 条")
             print("----------------------------------------")
-            print("未找到目标日期的文章")
+            print("⚠️  未找到目标日期的文章")
             return [], None
     except Exception as e:
-        print(f"爬虫 国务院文件 运行失败 - {e}")
+        print(f"❌ 爬虫 国务院文件 运行失败 - {e}")
         print("----------------------------------------")
         return [], None
 
