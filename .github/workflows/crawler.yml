@@ -65,12 +65,24 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           playwright install chromium
       
-      - name: 执行爬虫
-        run: python crawler_manager.py
+      - name: 创建results目录
+        run: mkdir -p results
+      
+      - name: 执行爬虫并保存输出
+        run: |
+          python crawler_manager.py 2>&1 | tee results/crawler_output_$(date +%Y%m%d_%H%M%S).md
         env:
           SUPABASE_PROJECT_API: ${{ secrets.SUPABASE_PROJECT_API }}
           SUPABASE_ANON_PUBLIC: ${{ secrets.SUPABASE_ANON_PUBLIC }}
           FEISHU_BOT_WEBHOOK: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+      
+      - name: 上传运行结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawler-results-${{ github.run_number }}
+          path: results/
+          retention-days: 30
       
       - name: 输出执行结果
         if: always()

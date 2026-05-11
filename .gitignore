@@ -26,6 +26,7 @@ json_structure.md
 *.sqlite3
 *.db
 *.csv
+results/
 
 # 配置/密钥
 .env
