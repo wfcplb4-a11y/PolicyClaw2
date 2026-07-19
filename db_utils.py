@@ -28,6 +28,8 @@ POLICY_TABLE_FIELDS = (
     "policy_key",
 )
 
+UPSERT_BATCH_SIZE = 100
+
 
 class DBUtils:
     def __init__(self):
@@ -93,6 +95,11 @@ class DBUtils:
         """只保留 policyclaw2 表实际存在并由爬虫负责写入的字段。"""
         return {field: item.get(field) for field in POLICY_TABLE_FIELDS if field in item}
 
+    @staticmethod
+    def iter_batches(items, batch_size=UPSERT_BATCH_SIZE):
+        for index in range(0, len(items), batch_size):
+            yield items[index:index + batch_size]
+
     def save_to_policy(self, data_list, source_name):
         """保存数据到 policyclaw2 表
 
@@ -116,45 +123,26 @@ class DBUtils:
             saved_items = []
             if self.allow_supabase_write:
                 try:
-                    # 尝试写入数据（不使用 on_conflict，避免约束错误）
+                    # policy_key 需要数据库唯一约束；见 supabase_policy_key_unique.sql。
                     supabase = self.get_client()
-                    for item in processed_data:
+                    for batch_items in self.iter_batches(processed_data):
                         try:
-                            database_item = self.to_database_item(item)
-                            # 优先按政策实体指纹幂等写入；数据库约束未就绪时退回标题匹配。
-                            match_field = "policy_key"
-                            try:
-                                existing = (
-                                    supabase.table(self.policy_table)
-                                    .select("id")
-                                    .eq("policy_key", database_item.get("policy_key"))
-                                    .execute()
-                                )
-                            except Exception:
-                                match_field = "title"
-                                existing = (
-                                    supabase.table(self.policy_table)
-                                    .select("id")
-                                    .eq("title", database_item.get("title"))
-                                    .execute()
-                                )
+                            batch = [
+                                self.to_database_item(item)
+                                for item in batch_items
+                            ]
+                            (
+                                supabase.table(self.policy_table)
+                                .upsert(batch, on_conflict="policy_key")
+                                .execute()
+                            )
+                            saved_items.extend(batch_items)
 
-                            if existing.data:
-                                # 已存在，更新数据
-                                (
-                                    supabase.table(self.policy_table)
-                                    .update(database_item)
-                                    .eq(match_field, database_item.get(match_field))
-                                    .execute()
-                                )
-                            else:
-                                # 不存在，插入数据
-                                supabase.table(self.policy_table).insert(database_item).execute()
-
-                            saved_items.append(item)
-
-                        except Exception as item_e:
-                            print(f"⚠️  {source_name}：单条数据处理失败 - {item_e}")
+                        except Exception as batch_e:
+                            print(
+                                f"⚠️  {source_name}：批量 UPSERT 失败，"
+                                f"请确认 {self.policy_table}.policy_key 已创建唯一约束 - {batch_e}"
+                            )
                             continue
 
                     print(f"✅ {source_name}：成功写入 {len(saved_items)} 条数据到 Supabase")
